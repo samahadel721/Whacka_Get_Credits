@@ -108,12 +108,18 @@ fi
 
 printf '\n'
 ok "تم إنشاء المشروع: ${DEST}"
-cat <<EOF
-
-  الخطوة التالية:
-    cd ${DEST}
-    $(have npm && [ -f "${DEST}/package.json" ] && echo "npm install")
-    bash ${ROOT}/scripts/serve.sh ${DEST}
-EOF
-[ "${TEMPLATE}" = "python-api" ] && printf '    (أو: python3 app.py)\n'
-printf '\n'
+need_install="no"
+if have npm && [ -f "${DEST}/package.json" ]; then
+  grep -Eq '"(dev)?[Dd]ependencies"' "${DEST}/package.json" && need_install="yes"
+fi
+{
+  printf '\n  الخطوة التالية:\n'
+  printf '    cd %s\n' "$DEST"
+  [ "$need_install" = "yes" ] && printf '    npm install\n'
+  case "$TEMPLATE" in
+    python-api) printf '    python3 app.py\n' ;;
+    node-api)   printf '    npm run dev\n' ;;
+    web-static) printf '    bash %s/serve.sh .\n' "$ROOT/scripts" ;;
+  esac
+  printf '    # أو معاينة على الشبكة: bash %s/serve.sh %s\n\n' "$ROOT/scripts" "$DEST"
+} | cat
