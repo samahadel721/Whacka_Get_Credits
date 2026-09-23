@@ -22,7 +22,7 @@ pkg upgrade -y
 
 ## 0.5) احسب المساحة قبل ما تنزّل
 
-مشروع termux-dev نفسه صغير جدًا (أقل من 1MB مع التاريخ)؛ المساحة فعليًا بتروحه على **حزم Termux**. قبل التثبيت اسأل apt نفسه:
+مشروع termux-dev نفسه صغير جدًا — قياس النسخة الحالية: 43 ملفًا بحجم **156KB**، و`clone` كامل على القرص **453KB** (منها `.git` وحده 191KB)، وحزمة zip بلا git **80KB**. المساحة فعليًا بتروحه على **حزم Termux**. قبل التثبيت اسأل apt نفسه:
 
 ```bash
 bash scripts/disk.sh --plan          # جدول مقارنة بين ملفات التثبيت
@@ -75,13 +75,32 @@ curl -I -m 8 https://packages.termux.dev
 ```
 
 ## 3) شغّل عدة سكربتات
+
+**أ) بـ `git`** (الشغل حاليًا على فرع `arena/01a0cde9-whacka-get-credits`):
+
 ```bash
 pkg install -y git
-git clone <رابط-مستودعك> ~/tools/termux-dev
+git clone -b arena/01a0cde9-whacka-get-credits \
+  https://github.com/samahadel721/Whacka_Get_Credits.git ~/tools/termux-dev
 cd ~/tools/termux-dev
 bash scripts/setup.sh -y
 bash scripts/doctor.sh
 ```
+
+**ب) بلا `git`** — حزمة أرشيف من GitHub (80KB، مجرَّبة حرفيًا):
+
+```bash
+cd ~
+curl -L -o termux-dev.zip \
+  https://github.com/samahadel721/Whacka_Get_Credits/archive/refs/heads/arena/01a0cde9-whacka-get-credits.zip
+unzip -q termux-dev.zip
+cd Whacka_Get_Credits-arena-01a0cde9-whacka-get-credits
+bash install.sh              # == setup.sh + doctor.sh في أمر واحد
+```
+
+`install.sh` مفيد كمان لو `git` عندك بايظ أو المساحة ضيّقة: `bash install.sh --tools-only` يثبّت أدوات خفيفة (~50MB) بلا Node/Python، و`--check-only` يفحص الملفات بلا أي تثبيت، و`--demo` يولّد مشروعًا ويشغّله.
+> خُد بالك: `curl -O` (بحرف O الكبير) بيسمّي الملف `01a0cde9-whacka-get-credits.zip` مش `termux-dev.zip` لأن الفرع نفسه فيه `/` — استخدم `-o termux-dev.zip`.
+
 
 ---
 

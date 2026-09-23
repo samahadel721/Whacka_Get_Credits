@@ -8,17 +8,37 @@
 
 ## 30 ثانية وتبدأ
 
-### لو `git` متاح عندك
+### بلا `git` — نزّل حزمة جاهزة (~80KB)
 
+أرشيف الملفات فقط، مش محتاج `git` خالص. جرّب الأوامر دي حرفيًا في Termux:
+
+```bash
+cd ~
+curl -L -o termux-dev.zip \
+  https://github.com/samahadel721/Whacka_Get_Credits/archive/refs/heads/arena/01a0cde9-whacka-get-credits.zip
+unzip -q termux-dev.zip
+cd Whacka_Get_Credits-arena-01a0cde9-whacka-get-credits
+bash install.sh        # فحص الملفات + تثبيت الحزم + doctor
+```
+
+أو في أمر واحد يولّد مشروعًا ويشغّله فورًا: `bash install.sh --demo`
+
+- تفضّل `tar.gz`؟ `curl -L -o termux-dev.tar.gz <نفس الرابط وابدّل .zip بـ .tar.gz>` ثم `tar xzf termux-dev.tar.gz`
+- نزّلتها على الكمبيوتر وحطّيتها في الموبايل؟ `termux-setup-storage` ثم `cd ~/storage/shared` قبل `unzip`
+- خيارات `install.sh`: `--check-only` (بلا تثبيت) · `--minimal` / `--tools-only` / `--python-only` / `--full` · `--demo`
+
+### لو `git` متاح عندك
 
 ```bash
 # 1) داخل Termux على الموبايل
 pkg update -y && pkg install -y git
-git clone https://github.com/samahadel721/Whacka_Get_Credits.git ~/tools/termux-dev
+git clone -b arena/01a0cde9-whacka-get-credits \
+  https://github.com/samahadel721/Whacka_Get_Credits.git ~/tools/termux-dev
 cd ~/tools/termux-dev
+#    (الشغل على الفرع ده؛ لما يتدمج في main احذف -b وكل اللي بعده)
 
 # 2) التثبيت الكامل (حزم + إعدادات + مجلدات)
-bash scripts/setup.sh -y
+bash scripts/setup.sh -y        # أو: bash install.sh
 
 # 3) تأكد إن البيئة سليمة
 bash scripts/doctor.sh
@@ -28,17 +48,6 @@ bash scripts/project.sh demo --template node-api
 bash scripts/serve.sh ~/projects/demo
 #    ثم افتح في متصفح الموبايل:  http://127.0.0.1:8080
 ```
-
-### أو بلا git — نزّل حزمة جاهزة
-من الكمبيوتر أو المتصفح: <https://github.com/samahadel721/Whacka_Get_Credits/archive/refs/heads/main.zip> (~80KB)، انقلها لمجلد الهاتف، ثم:
-
-```bash
-termux-setup-storage
-cd ~ && mkdir -p tools && tar xzf ~/storage/shared/termux-dev.tar.gz -C ~/tools/termux-dev   # أو unzip للنسخة .zip
-cd ~/tools/termux-dev && bash install.sh
-```
-
-`install.sh` يفحص سلامة الملفات أولًا، يثبّت `git` لو ناقص، يشغّل `setup.sh` ثم `doctor.sh`، وفيه `--demo` يولّد مشروعًا تجريبيًا ويشغّله فورًا.
 
 لو التثبيت من GitHub بطيء عندك، راجع [تغيير مستودع الحزم](docs/INSTALL.md#مستودعات-الحزم-بطيئة).
 
@@ -104,12 +113,13 @@ bash scripts/project.sh myapp --template web-static    # موقع ثابت جا�
 
 | البند | الحجم |
 |---|---|
-| ملفات المشروع (41 ملفًا / ~3000 سطر) | **137 KB** |
-| `.git` بالتاريخ كاملًا | **449 KB** |
-| الـ clone كاملًا على القرص | **691 KB** (أقل من 1MB) |
-| مشروع تُولّده من قالب (`node-api`) | **~50 KB** (11 ملفًا، بلا `node_modules`) |
+| ملفات المشروع (43 ملفًا / 3,583 سطر) | **156 KB** (159,200 بايت) |
+| حزمة zip على GitHub (بلا `git`) | **80 KB** — وtar.gz **55 KB** |
+| `.git` بالتاريخ كاملًا | **572 KB** في مستودع العمل، و**191 KB** في clone نظيف |
+| الـ clone كاملًا على القرص | **453 KB** (أقل من 1MB) |
+| مشروع تُولّده من قالب (`node-api`) | **18 KB** ملفات (11 ملفًا، بلا `node_modules`) — 185 KB على القرص مع `.git` بتاعه |
 | Termux + bootstrap | **~120–180 MB** |
-| `bash setup.sh` (ملف `full`: 17 حزمة) | **~350–450 MB** — منها nodejs-lts وحده ~120MB وpython ~70MB |
+| `bash setup.sh` (ملف `full`: 17 حزمة) | **~330–450 MB** — منها nodejs-lts وحده ~120MB وpython ~70MB |
 | `--tools-only` (11 حزمة، بدون Node/Python) | **~50 MB** |
 
 الأرقام دي تقديرية للأحجام الكبيرة؛ عشان تاخد رقم جهازك بالضبط (قبل ما تنزّل أي حاجة):
