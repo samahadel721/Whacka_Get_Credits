@@ -167,7 +167,11 @@ server.listen(PORT, HOST, () => {
 const shutdown = (sig) => {
   log(`${sig} — إغلاق آمن`);
   server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 5000).unref();
+  // fetch/axios يبقيان keep-alive مفتوحًا، فينتظر server.close() للأبد.
+  // نغلق الصلات الخاملة ثم كلها، مع سقف زمني مضمون الخروج.
+  if (typeof server.closeIdleConnections === "function") server.closeIdleConnections();
+  setTimeout(() => server.closeAllConnections?.(), 200);
+  setTimeout(() => process.exit(1), 2000).unref();
 };
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));

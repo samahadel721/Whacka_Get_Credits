@@ -38,6 +38,8 @@ class ApiSmokeTest(unittest.TestCase):
             env={**os.environ, "PORT": str(port), "HOST": "127.0.0.1", "DB_PATH": f"{tmp}/t.db"},
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
+            # مجموعة عمليات مستقلة: نقتل الشجرة كلها ولا نترك يتيماً
+            start_new_session=True,
         )
         for _ in range(80):
             try:
@@ -49,9 +51,20 @@ class ApiSmokeTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        if cls.proc:
-            cls.proc.terminate()
-            cls.proc.wait(timeout=5)
+        if not cls.proc:
+            return
+        import signal
+
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(os.getpgid(cls.proc.pid), sig)
+            except (ProcessLookupError, PermissionError):
+                break
+            try:
+                cls.proc.wait(timeout=3)
+                return
+            except subprocess.TimeoutExpired:
+                continue
 
     def call(self, method: str, path: str, body: dict | None = None):
         import urllib.error

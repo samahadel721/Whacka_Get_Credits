@@ -82,3 +82,52 @@ patch_bashrc() {
   fi
   ok "تم تحديث ${BASHRC}"
 }
+
+# ---------------------------------------------------------------------------
+# إيجاد الـ PIDs التي تستمع على بورت معيّن — بدون اعتماديات خارجية.
+# ss/lsof اختيارية إن وُجدتا، وإلا نقرأ /proc مباشرة — فيشتغل على Termux مجرد من أي حزمة.
+pids_listening_on() {
+  local port="$1" inodes="" pid out=""
+  [ -n "$port" ] || return 1
+
+  if have ss; then
+    out="$(ss -Hltnp "sport = :$port" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u)"
+  elif have lsof; then
+    out="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u)"
+  fi
+
+  if [ -z "$out" ]; then
+    local hex; hex="$(printf '%04X' "$port")"
+    inodes="$(awk -v h="$hex" '$2 ~ (":" h "$") && $4 == "0A" {print $10}' \
+              /proc/net/tcp /proc/net/tcp6 2>/dev/null | sort -u)"
+    [ -n "$inodes" ] || return 1
+    local fd
+    for fd in /proc/[0-9]*/fd/*; do
+      local target; target="$(readlink "$fd" 2>/dev/null)" || continue
+      case "$target" in socket:*) ;; *) continue ;; esac
+      local ino="${target#socket:[}"; ino="${ino%]}"
+      case $'\n'"$inodes"$'\n' in
+        *$'\n'"$ino"$'\n'*) pid="${fd#/proc/}"; pid="${pid%%/*}"; out="$out${nl}$pid"; nl=$'\n' ;;
+      esac
+    done
+  fi
+
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out" | tr ' \n' '\n\n' | grep -E '^[0-9]+$' | sort -u
+}
+
+# إيقاف كل ما يسمع على بورت، مع تصعيد لطيف ثم قسري.
+stop_port() {
+  local port="$1" pids killed=0 p
+  pids="$(pids_listening_on "$port" || true)"
+  [ -n "$pids" ] || return 1
+  for p in $pids; do
+    kill -TERM "$p" 2>/dev/null && killed=$((killed + 1))
+    printf '%s\n' "${C_DIM}  SIGTERM → pid $p ($(cat "/proc/$p/comm" 2>/dev/null || echo '?'))${C_RESET}"
+  done
+  sleep 1
+  for p in $pids; do
+    if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; printf '  %sSIGKILL → pid %s%s\n' "$C_YELLOW" "$p" "$C_RESET"; fi
+  done
+  [ "$killed" -gt 0 ]
+}

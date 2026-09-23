@@ -14,12 +14,14 @@
 | `open failed: EACCES` عند كتابة ملف في Downloads | أندرويد 11+ يقيّد الكتابة خارج مجلداتك | استخدم `~/storage/shared/Download/` ولا تكتب في جذر الذاكرة |
 | `curl: (6) Could not resolve host` | DNS/طيران/VPN | `ping -c 2 1.1.1.1`؛ لو نجح فالمشكلة DNS: جرّب شبكة أخرى أو `termux-change-repo` |
 | `No space left on device` | ممتلئ | `pkg clean -y && npm cache clean --force && rm -rf ~/.cache ~/.npm/_cacache` ثم `df -h ~` |
-| `address already in use ::8080` | المنفذ مشغول | `bash scripts/serve.sh . --port 8090` أو `pkill -f "http.server 8080"` |
+| `address already in use ::8080` | المنفذ مشغول (غالبًا سيرفر سابق لم يمت) | `bash scripts/serve.sh --status --port 8080` لمعرفة القاتل، ثم `bash scripts/serve.sh --stop --port 8080` أو `make stop PORT=8080` |
 | الجهاز لا يفتح رابط الشبكة رغم تشغيل السيرفر | «عزل العملاء» في الراوتر (AP Isolation) أو شبكة ضيف | جرّب hotspot من موبايل آخر، أو استخدم الموبايل نفسه `http://127.0.0.1:PORT`، أو `scripts/tunnel.sh` |
 | السيرفر يتوقف بعد دقائق | البطارية Optimization قتلت Termux | `termux-wake-lock` + عدم تقييد البطارية (راجع [INSTALL.md](INSTALL.md#4-أوقف-قتل-أندرويد-للعملية-ضروري)) |
 | `git: ... Author identity unknown` | لا هوية في git | `git config --global user.name "اسمك" && git config --global user.email "you@mail.com"` |
 | `gh: To use GitHub CLI in Termux` لا يعمل للتسجيل | متصفح غير موثّق | استخدم Token: أنشئ **Fine-grained PAT** من الموقع ثم `export GH_PAT=...` (`echo $GH_PAT \| gh auth login --with-token`) |
 | بايثون لا يجد `sqlite3` | حزمة ناقصة | `pkg install -y python` (sqlite ضمن المكتبة القياسية) أو `pkg install -y sqlite` لواجهة الطرف السطر |
+
+> `--stop` يعمل بدون `ss` أو `lsof` أيضًا: يقرأ `/proc/net/tcp` ويطابق الـ inode بمفاتح `/proc/<pid>/fd`، لذا يشتغل على Termux مجرد من أي حزمة. لو كانت العملية تخص مستخدمًا آخر (سيرفر systemd مثلاً) ستحتاج `sudo` أو إيقافها من مدير الخدمات.
 
 ## السلوك الغريب في Termux تحديدًا
 - **الشاشة تنطفئ ⇒ العملية تتوقف**: `termux-wake-lock` ضروري، ويمكن `termux-wake-unlock` عند الانتهاء.

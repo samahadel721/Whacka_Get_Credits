@@ -2,7 +2,9 @@
 # ============================================================
 #  serve.sh — سيرفر تطوير على 0.0.0.0 عشان تفتحه من متصفح الموبايل
 #  تشغيل:
-#    bash serve.sh [المجلد] [--port 8080] [--node] [--tailnet]
+#    bash serve.sh [المجلد] [--port 8080] [--node|--python] [--open]
+#    bash serve.sh --stop  [--port 8080]     # إيقاف أي سيرفر يسمع على المنفذ
+#    bash serve.sh --status [--port 8080]    # من يسمع على المنفذ؟
 #  ملاحظة أمنية: أي جهاز على نفس الشبكة (واي فاي/هوتسبوت) يقدر يفتح الرابط —
 #  لا تخدم ملفات حساسة (.env, مفاتيح) عبره. نضيف مسارات الخطر افتراضياً.
 # ============================================================
@@ -15,10 +17,13 @@ DIR="$PWD"
 PORT="${PORT:-8080}"
 MODE="auto"     # auto | node | python
 OPEN=0
+ACTION="serve"  # serve | stop | status
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --port|-p) PORT="${2:?}"; shift 2 ;;
+    --stop)  ACTION="stop"; shift ;;
+    --status) ACTION="status"; shift ;;
     --node) MODE="node"; shift ;;
     --python) MODE="python"; shift ;;
     --open) OPEN=1; shift ;;
@@ -26,6 +31,27 @@ while [ $# -gt 0 ]; do
     *) DIR="$1"; shift ;;
   esac
 done
+if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+  case "$ACTION" in stop|status) ;; *) die "منفذ غير صالح: $PORT" ;; esac
+fi
+
+case "$ACTION" in
+  stop)
+    step "إيقاف كل ما يسمع على المنفذ ${PORT}"
+    if stop_port "$PORT"; then ok "تم الإيقاف"; else die "لا توجد عملية تسمع على ${PORT}"; fi
+    exit 0 ;;
+  status)
+    if pids="$(pids_listening_on "$PORT")"; then
+      say "المنفذ ${PORT} مشغول:"
+      for pid in $pids; do
+        printf '   pid %s  %s\n' "$pid" "$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || echo '?')"
+      done
+      exit 0
+    fi
+    say "المنفذ ${PORT} حر"
+    exit 0 ;;
+esac
+
 [ -d "$DIR" ] || die "المجلد غير موجود: $DIR"
 DIR="$(cd "$DIR" && pwd)"
 

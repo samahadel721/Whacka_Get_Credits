@@ -25,6 +25,12 @@ serve:           ## سيرفر تطوير: make serve DIR=~/projects/app [PORT=8
 backup:          ## نسخة احتياطية + push
 	@bash $(HERE)/scripts/backup.sh --push
 
+stop:            ## إيقاف سيرفر يسمع على بورت: make stop PORT=8080
+	@bash $(HERE)/scripts/serve.sh --stop $(if $(PORT),--port $(PORT),)
+
+status:          ## من يسمع على البورت؟ make status PORT=8080
+	@bash $(HERE)/scripts/serve.sh --status $(if $(PORT),--port $(PORT),)
+
 tunnel:          ## نفق تجريبي: make tunnel PORT=8080
 	@bash $(HERE)/scripts/tunnel.sh $(PORT)
 
@@ -32,7 +38,7 @@ check:           ## فحص صيغة كل سكربتات shell والـ JS
 	@fail=0; \
 	for f in scripts/*.sh scripts/lib/*.sh; do bash -n "$$f" || fail=1; done; \
 	for f in $(shell find templates -name '*.js' 2>/dev/null); do node --check "$$f" >/dev/null || fail=1; done; \
-	for f in $(shell find templates -name '*.py' 2>/dev/null); do python3 -m py_compile "$$f" || fail=1; done; \
+	for f in $(shell find templates -name '*.py' 2>/dev/null); do python3 -c "import sys;compile(open(sys.argv[1],encoding='utf-8').read(),sys.argv[1],'exec')" "$$f" || fail=1; done; \
 	[ $$fail -eq 0 ] && echo "✓ كل الملفات صالحة" || (echo "✗ في أخطاء صيغة"; exit 1)
 
 test:            ## اختبار القوالب (تشغّل الخوادم فعليًا)

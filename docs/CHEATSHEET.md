@@ -66,6 +66,13 @@ git log --oneline --graph -10
 gh repo create myapp --private --source . --push
 ```
 
+## بورت عالق (السيرفر السابق لم يمت)
+```bash
+bash scripts/serve.sh --status --port 8080   # من يسمع عليه؟
+bash scripts/serve.sh --stop   --port 8080   # إيقافه بالأمان
+make status PORT=8080 ; make stop PORT=8080  # نفس الشيء عبر make
+```
+
 ## هذا المستودع
 ```bash
 bash scripts/setup.sh -y

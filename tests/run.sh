@@ -6,18 +6,36 @@
 #  تشغيل:  bash tests/run.sh      (أو: make test)
 # ============================================================
 set -uo pipefail
+export PYTHONDONTWRITEBYTECODE=1     # لا ملفات .pyc داخل القوالب أثناء الاختبار
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d "${ROOT}/.tmp-tests-XXXXXX")"
 PIDS=""
 cleanup() {
   for pid in $PIDS; do kill "$pid" 2>/dev/null; done
+  # إغلاق بالمنفذ: يقتل حتى العمليات التي تنفصل عن الأب (python/node children)
+  local pp
+  for pp in $PORTS_USED; do
+    bash "$ROOT/scripts/serve.sh" --stop --port "$pp" >/dev/null 2>&1
+  done
+  pkill -f "$TMP" 2>/dev/null
   rm -rf "$TMP"
+  # نظافة المستودع بعد الاختبارات: لا مجلدات ولا كاش متروك
+  if ls -d "$ROOT"/.tmp-tests-* >/dev/null 2>&1; then
+    printf '  %s!%s مجلد اختبار لم يُحذف: %s\n' "$R" "$N" "$(ls -d "$ROOT"/.tmp-tests-* | head -1 | xargs basename 2>/dev/null)"
+  fi
+  if find "$ROOT/templates" -name '__pycache__' -o -name '*.pyc' | grep -q .; then
+    printf '  %s!%s بقايا __pycache__ داخل القوالب\n' "$R" "$N"
+  fi
   # py_compile/unittest يخلّفان __pycache__ داخل القوالب — لا نترك أثرًا في المستودع
   rm -rf "$ROOT"/templates/*/__pycache__ "$ROOT"/templates/*/*/__pycache__
 }
 trap cleanup EXIT INT TERM
 
 PASS=0 FAIL=0
+PORTS_USED=""
+track_port() { # <port> — يسجّل المنفذ ليُغلق في التنظيف (لا يُنادى داخل $() )
+  PORTS_USED="$PORTS_USED $1"
+}
 if [ -t 1 ]; then
   G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; B=$'\033[1m'; D=$'\033[2m'; N=$'\033[0m'
 else
@@ -34,6 +52,7 @@ t() { # "اسم الاختبار" — أمر...
     printf '%s\n' "$out" | sed "s/^/      ${D}/" | tail -6
   fi
 }
+py_check() { python3 "$TMP/pycheck.py" "$1"; }
 section() { printf '\n%s%s%s\n' "$B" "$1" "$N"; }
 skip()    { printf '  %s!%s %s\n' "$Y" "$N" "$1"; }
 
@@ -64,6 +83,14 @@ HAVE_NODE=0; command -v node    >/dev/null 2>&1 && HAVE_NODE=1
 HAVE_PY=0;   command -v python3 >/dev/null 2>&1 && HAVE_PY=1
 HAVE_CURL=0; command -v curl    >/dev/null 2>&1 && HAVE_CURL=1
 HAVE_GIT=0;  command -v git     >/dev/null 2>&1 && HAVE_GIT=1
+
+cat > "$TMP/pycheck.py" <<'PYC'
+"""فحص صيغة بايثون بدون كتابة ملفات .pyc داخل المستودع."""
+import sys
+
+src = open(sys.argv[1], encoding="utf-8").read()
+compile(src, sys.argv[1], "exec")
+PYC
 
 cat > "$TMP/jsonget.js" <<'JS'
 let d = "";
@@ -112,7 +139,7 @@ else
   skip "node غير متوفر"
 fi
 if [ "$HAVE_PY" = "1" ]; then
-  while IFS= read -r f; do t "py_compile ${f#"$ROOT"/}" python3 -m py_compile "$f"; done < <(find "$ROOT/templates" -name '*.py' | sort)
+  for f in $(find "$ROOT/templates" -name '*.py' | sort); do t "compile-check ${f#"$ROOT"/}" py_check "$f"; done
 else
   skip "python3 غير متوفر"
 fi
@@ -158,7 +185,7 @@ fi
 # ================================================================ 4
 if [ "$HAVE_NODE" = "1" ] && [ "$HAVE_CURL" = "1" ]; then
   section "4) node-api — خادم حقيقي"
-  P1="$(free_port)"
+  P1="$(free_port)"; track_port "$P1"
   ( cd "$ROOT/templates/node-api" && PORT="$P1" HOST=127.0.0.1 DATA_DIR="$TMP/n1" node server.js >"$TMP/node.log" 2>&1 ) &
   N1=$!; PIDS="$PIDS $N1"
   U1="http://127.0.0.1:$P1"
@@ -206,7 +233,7 @@ fi
 # ================================================================ 5
 if [ "$HAVE_PY" = "1" ] && [ "$HAVE_CURL" = "1" ] && [ -d "$TMP/demo-py" ]; then
   section "5) python-api — خادم حقيقي"
-  P2="$(free_port)"
+  P2="$(free_port)"; track_port "$P2"
   ( cd "$TMP/demo-py" && PORT="$P2" HOST=127.0.0.1 DB_PATH="$TMP/py.db" python3 app.py >"$TMP/py.log" 2>&1 ) &
   P2PID=$!; PIDS="$PIDS $P2PID"
   U2="http://127.0.0.1:$P2"
@@ -250,7 +277,7 @@ if [ "$HAVE_PY" = "1" ] && [ "$HAVE_CURL" = "1" ]; then
   printf 'SECRET_TOKEN=leak-me\n' > "$TMP/webroot/.env"
   printf 'pk-leak\n' > "$TMP/webroot/id_rsa"
   printf 'ref: refs/heads/main\n' > "$TMP/webroot/.git/HEAD"
-  P3="$(free_port)"
+  P3="$(free_port)"; track_port "$P3"
   ( bash "$ROOT/scripts/serve.sh" "$TMP/webroot" --port "$P3" >"$TMP/serve.log" 2>&1 ) &
   SPID=$!; PIDS="$PIDS $SPID"
   U3="http://127.0.0.1:$P3"
@@ -261,6 +288,11 @@ if [ "$HAVE_PY" = "1" ] && [ "$HAVE_CURL" = "1" ]; then
     t ".git/HEAD محجوب (403)"    bash -c "[ \"$(code "$U3/.git/HEAD")\" = 403 ]"
     t "قيمة السر لم تتسرب"      bash -c "! curl -sS -m 5 '$U3/.env' | grep -q leak-me"
     t "منفذ مشغول → فشل واضح"   bash -c "! bash '$ROOT/scripts/serve.sh' '$TMP/webroot' --port '$P3' >/dev/null 2>&1"
+    t "--status يكشف المشغول"   bash -c "bash '$ROOT/scripts/serve.sh' --status --port '$P3' | grep -q 'مشغول'"
+    t "--stop يوقف السيرفر"       bash -c "bash '$ROOT/scripts/serve.sh' --stop --port '$P3' >/dev/null 2>&1; sleep 1; ! curl -sS -m 2 -o /dev/null 'http://127.0.0.1:$P3/index.html'"
+    t "المنفذ أصبح حرًا بعد الإيقاف" bash -c "bash '$ROOT/scripts/serve.sh' --status --port '$P3' | grep -q 'حر'"
+    t "إعادة التشغيل بعد --stop تنجح" bash -c "( bash '$ROOT/scripts/serve.sh' '$TMP/webroot' --port '$P3' >/dev/null 2>&1 & ) ; for i in \$(seq 1 40); do curl -sS -m 1 -o /dev/null 'http://127.0.0.1:$P3/index.html' && exit 0; sleep 0.25; done; exit 1"
+    t "بورت حر: --stop يفشل برسالة"  bash -c "! bash '$ROOT/scripts/serve.sh' --stop --port '$(free_port)' >/dev/null 2>&1"
     t "منفذ خارج المدى → رفض"    bash -c "! bash '$ROOT/scripts/serve.sh' '$TMP/webroot' --port 99999 >/dev/null 2>&1"
     t "مجلد غير موجود → رفض"     bash -c "! bash '$ROOT/scripts/serve.sh' '$TMP/does-not-exist' >/dev/null 2>&1"
     t "serve.sh --help"          bash "$ROOT/scripts/serve.sh" --help
@@ -336,6 +368,29 @@ t "لا إشارات لأدوات غش/احتيال" bash -c "! grep -rniE 'botn
 t "لا بقايا tmp في الريبو" bash -c "! find '$ROOT' -name '*.tmp' -o -name '.td_blocklist.py' | grep -q ."
 t "docs/INSTALL.md يحذر من نسخة Play Store" bash -c "grep -qi 'Google Play' '$ROOT/docs/INSTALL.md'"
 
+section "10) التنظيف: لا شاردة ولا منافذ معلّقة"
+# نُغلق كل منفذ استخدمناه ثم نتحقق أنه تحرّر — نفس المنطق الذي يستخدمه cleanup()
+for pp in $PORTS_USED; do
+  bash "$ROOT/scripts/serve.sh" --stop --port "$pp" >/dev/null 2>&1
+done
+for i in $(seq 1 20); do
+  remaining=0
+  for pp in $PORTS_USED; do
+    bash -c "curl -sS -m 1 -o /dev/null 'http://127.0.0.1:$pp/'" 2>/dev/null && remaining=$((remaining + 1))
+  done
+  [ "$remaining" = 0 ] && break
+  sleep 0.25
+done
+for pp in $PORTS_USED; do
+  t "المنفذ $pp تحرّر" bash -c "! curl -sS -m 1 -o /dev/null 'http://127.0.0.1:$pp/'"
+done
+t "لا سيرفرات شاردة من القوالب" bash -c '
+  left=$(ps -eo args 2>/dev/null | grep -cE "^node server\.js$|^python3 app\.py$")
+  if [ "$left" != 0 ]; then
+    echo "      عملية شاردة: $left"
+    ps -eo pid,args | grep -E "^ *[0-9]+ (node server.js|python3 app.py)$" | sed "s/^/        /"
+    exit 1
+  fi'
 printf '\n%sالنتيجة%s\n  %sPASS: %s%s   %sFAIL: %s%s\n' "$B" "$N" "$G" "$PASS" "$N" "$R" "$FAIL" "$N"
 if [ "$FAIL" -gt 0 ]; then
   printf '  %sبعض الاختبارات فشلت — راجع السطور أعلاه.%s\n' "$R" "$N"

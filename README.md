@@ -40,6 +40,7 @@ bash scripts/serve.sh ~/projects/demo
 | `scripts/doctor.sh [--json]` | يفحص 15 نقطة (صلاحية التخزين، مساحة القرص، 16KB page size، سلامة dpkg، git identity، الشبكة…) ويعطيك سطر «الحل» لكل مشكلة. |
 | `scripts/project.sh <name> -t <template>` | ينسخ قالباً جاهزاً، يستبدل الاسم، `git init` + أول commit. `--list` لعرض القوالب. |
 | `scripts/serve.sh [dir] [--port]` | سيرفر تطوير على `0.0.0.0` ويطبع رابط الشبكة، يحجب `.env` و`.git` تلقائياً، ويرفض المسارات خارج المجلد. |
+| `scripts/serve.sh --stop / --status --port N` | يوقف/يكشف من يسمع على المنفذ — عبر `ss`/`lsof` إن وُجدا، وإلا بقراءة `/proc` مباشرة. يفيد لما يعلق سيرفر على الموبايل ويحتل المنفذ. |
 | `scripts/tunnel.sh <port>` | رابط مؤقت للتجربة (cloudflared → ngrok → localtunnel → serveo حسب المتاح). |
 | `scripts/backup.sh [--push] [--shared]` | `commit` + رفع GitHub + أرشيف `tar.gz` في `~/backups` أو مجلد التنزيلات. |
 
