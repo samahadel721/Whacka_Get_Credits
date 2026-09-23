@@ -68,7 +68,14 @@ case "$MODE" in
     printf '\n[وضع الفحص فقط]\n' ;;
   *)
     step_install_git
-    _free="$(df -Pk "${HOME:-.}" 2>/dev/null | awk 'NR==2{print $4}')"
+    # نفس مصدر الرقم اللي بيستخدمه setup.sh (يدعم TD_FREE_KB في الاختبارات)
+    if [ -f scripts/lib/common.sh ]; then
+      # shellcheck source=scripts/lib/common.sh
+      . scripts/lib/common.sh
+      _free="$(free_kb)"
+    else
+      _free="$(df -Pk "${HOME:-.}" 2>/dev/null | awk 'NR==2{print $4}')"
+    fi
     [ -n "$_free" ] && printf 'المساحة الحرة قبل التثبيت: %sMB\n' "$((_free / 1024))"
     printf '\n→ bash scripts/setup.sh -y %s\n' "${ARGS[*]:-}"
     bash scripts/setup.sh -y ${ARGS[@]:-} ;;
