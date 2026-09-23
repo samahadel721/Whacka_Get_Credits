@@ -1,0 +1,16 @@
+{
+  "name": "__PROJECT_NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node REST API مُولّد من قالب termux-dev",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check src/store.js"
+  },
+  "license": "MIT"
+}

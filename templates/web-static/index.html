@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>__PROJECT_NAME__</title>
+  <meta name="description" content="صفحة تجريبية من قالب termux-dev" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <strong>__PROJECT_NAME__</strong>
+    <nav><a href="#stats">إحصاءات</a><a href="#notes">ملاحظات</a></nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>قالب صفحة ثابتة جاهز للنشر</h1>
+      <p>يعمل بدون Node ولا build — يفتح من المتصفح مباشرة ويُرفع على GitHub Pages.</p>
+      <button id="ping" class="btn">اختبر الاتصال</button>
+      <span id="ping-state" class="state"></span>
+    </section>
+
+    <section id="stats" class="grid">
+      <article class="tile"><b id="t-clicks">0</b><span>ضغطات الزر</span></article>
+      <article class="tile"><b id="t-store">0</b><span>ملاحظات محفوظة</span></article>
+      <article class="tile"><b id="t-online">?</b><span>متصل بالشبكة</span></article>
+    </section>
+
+    <section id="notes" class="card">
+      <h2>ملاحظات (تُحفظ على جهازك فقط)</h2>
+      <form id="note-form" class="row">
+        <input id="note-input" placeholder="اكتب ملاحظة…" maxlength="140" autocomplete="off" />
+        <button class="btn" type="submit">حفظ</button>
+      </form>
+      <ul id="notes-list"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <small>قالب تعليمي — عدّل <code>app.js</code> وابدأ.</small>
+  </footer>
+  <script src="./app.js" type="module"></script>
+</body>
+</html>

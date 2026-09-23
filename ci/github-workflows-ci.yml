@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+
+jobs:
+  toolkit:
+    name: صياغة + اختبارات تكامل
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) فحص الصيغة لكل سكربتات shell وملفات القوالب
+      - name: bash -n / node --check / py_compile
+        run: make check
+
+      # 2) الاختبارات الكاملة: تشغّل خوادم القوالب فعلياً على منافذ عشوائية
+      - name: integration tests
+        run: bash tests/run.sh
+
+      # 3) lint استعلامي — لا يُفشل البناء، بل يترك تقريراً
+      - name: shellcheck (report only)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck -S warning -x scripts/*.sh scripts/lib/*.sh tests/run.sh | tee shellcheck.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shellcheck-report
+          path: shellcheck.txt

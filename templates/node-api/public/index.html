@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>__PROJECT_NAME__ — لوحة المتابعة</title>
+<style>
+  :root { color-scheme: dark; --bg:#0e1116; --fg:#e6edf3; --mut:#8b949e; --line:#21262d; --acc:#2f81f7; --ok:#3fb950; }
+  * { box-sizing: border-box }
+  body { margin:0; font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--fg); padding:24px 16px 64px; }
+  .wrap { max-width: 720px; margin-inline:auto }
+  h1 { font-size:20px; margin:0 0 4px }
+  p.sub { color:var(--mut); margin:0 0 24px; font-size:14px }
+  .card { background:#161b22; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  input,button { font:inherit; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0d1117; color:var(--fg) }
+  input { flex:1 1 200px; min-width:0 }
+  button { background:var(--acc); border-color:transparent; color:#fff; cursor:pointer }
+  button.ghost { background:transparent; color:var(--mut); border-color:var(--line) }
+  ul { list-style:none; padding:0; margin:0 }
+  li { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--line) }
+  li:last-child { border-bottom:0 }
+  time { color:var(--mut); font-size:12px; white-space:nowrap }
+  .stat { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums }
+  .stat b { display:block; font-size:22px }
+  .stat span { color:var(--mut); font-size:12px }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--mut); display:inline-block; margin-inline-end:6px }
+  .dot.live { background:var(--ok) }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>__PROJECT_NAME__</h1>
+  <p class="sub"><span class="dot" id="dot"></span>قالب تجريبي: الواجهة تقرأ من <code>/api</code> مباشرة.</p>
+
+  <section class="card">
+    <div class="stat">
+      <div><b id="s-items">—</b><span>عناصر مخزّنة</span></div>
+      <div><b id="s-up">—</b><span>مدة التشغيل (ثانية)</span></div>
+      <div><b id="s-node">—</b><span>إصدار Node</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <form class="row" id="form" autocomplete="off">
+      <input id="title" placeholder="أضف عنصرًا جديدًا…" maxlength="200" required />
+      <button type="submit">إضافة</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <strong>العناصر</strong>
+      <button class="ghost" id="refresh" type="button">تحديث</button>
+    </div>
+    <ul id="list"><li>جارٍ التحميل…</li></ul>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const api = async (p, opts) => {
+  const r = await fetch(p, { headers: { 'content-type': 'application/json' }, ...opts });
+  if (r.status === 204) return null;
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.status);
+  return data;
+};
+
+async function load() {
+  try {
+    const [{ items, total }, h] = await Promise.all([api('/api/items'), api('/api/health')]);
+    $('#dot').classList.toggle('live', h.status === 'ok');
+    $('#s-items').textContent = total;
+    $('#s-up').textContent = h.uptimeSec;
+    $('#s-node').textContent = h.node;
+    $('#list').innerHTML = items.length
+      ? items.map((i) => `<li><span>${i.title.replace(/[<>]/g, '')}</span><span class="row"><time>${new Date(i.createdAt).toLocaleTimeString('ar-EG')}</time><button class="ghost" data-del="${i.id}">حذف</button></span></li>`).join('')
+      : '<li><span style="color:#8b949e">لا عناصر بعد.</span></li>';
+  } catch (e) {
+    $('#dot').classList.remove('live');
+    $('#list').innerHTML = `<li>تعذّر الاتصال بالـ API: ${e.message}</li>`;
+  }
+}
+
+$('#form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const title = $('#title').value.trim();
+  if (!title) return;
+  await api('/api/items', { method: 'POST', body: JSON.stringify({ title }) });
+  $('#title').value = '';
+  load();
+});
+
+$('#list').addEventListener('click', async (ev) => {
+  const id = ev.target?.dataset?.del;
+  if (!id) return;
+  await api(`/api/items/${id}`, { method: 'DELETE' });
+  load();
+});
+
+$('#refresh').addEventListener('click', load);
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>
