@@ -8,6 +8,18 @@
 
 ## 30 ثانية وتبدأ
 
+### سطر واحد — نسخ ولصق في Termux (بلا `git`)
+
+```bash
+cd ~ && curl -L -o termux-dev.tar.gz \
+  https://github.com/samahadel721/Whacka_Get_Credits/archive/refs/heads/arena/01a0cde9-whacka-get-credits.tar.gz \
+  && tar xzf termux-dev.tar.gz \
+  && cd Whacka_Get_Credits-arena-01a0cde9-whacka-get-credits && bash install.sh
+```
+
+مجرَّب حرفيًا: **57KB** تنزيل، **174KB** على القرص، و`install.sh` يكمّل التثبيت + `doctor` لوحده.
+مساحتك ضيّقة؟ `bash install.sh --tools-only` · عايز تشغّل حاجة على طول؟ `bash install.sh --demo`.
+
 ### بلا `git` — نزّل حزمة جاهزة (~80KB)
 
 أرشيف الملفات فقط، مش محتاج `git` خالص. جرّب الأوامر دي حرفيًا في Termux:
