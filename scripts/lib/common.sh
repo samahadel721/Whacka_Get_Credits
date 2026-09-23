@@ -152,6 +152,24 @@ td_profile_packages() { # <profile> → قائمة الحزم
 
 td_profiles() { printf 'full minimal python tools\n'; }
 
+# أقل مساحة حرة مطلوبة قبل التنزيل (كيلوبايت) — لتفادي نفاد القرص في نص الـ install.
+# الأرقام محسوبة على أساس حجم التنزيل + كاش apt + هامش أمان.
+td_profile_min_free_kb() {
+  case "${1:-full}" in
+    tools)   echo 120000 ;;   # ~50MB على القرص
+    python)  echo 220000 ;;   # ~120MB
+    minimal) echo 300000 ;;   # ~170MB
+    full)    echo 650000 ;;   # ~330–450MB + كاش
+    *)       echo 650000 ;;
+  esac
+}
+
+# المساحة الحرة بـ KB لقرص $HOME. TD_FREE_KB تتبّعها لأغراض الاختبار فقط.
+free_kb() {
+  if [ -n "${TD_FREE_KB:-}" ]; then printf '%s\n' "$TD_FREE_KB"; return 0; fi
+  df -Pk "${HOME:-.}" 2>/dev/null | awk 'NR==2{print $4}'
+}
+
 # تقدير المساحة قبل التثبيت من apt نفسه (محاكاة بلا تنزيل).
 # يعيد سطرًا: "<حزم جديدة> <حجم التنزيل> <المساحة الإضافية>" أو يفشل بهدوء.
 apt_projection() { # <profile>

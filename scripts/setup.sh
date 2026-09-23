@@ -36,6 +36,31 @@ log_head() {
   fi
 }
 
+# ── فحص المساحة الحرة قبل أي تنزيل ─────────────────────────────
+require_space() {
+  local need avail avail_mb
+  need="$(td_profile_min_free_kb "$PROFILE")"
+  avail="$(free_kb)"
+  if [ -z "$avail" ]; then
+    warn "تعذّرت قراءة المساحة الحرة (df) — لو التثبيت انقطع في النص، امسح كاش apt: ${HERE}/disk.sh --clean"
+    return 0
+  fi
+  avail_mb=$(( avail / 1024 ))
+  if [ "$avail" -ge "$need" ]; then
+    say "المساحة الحرة: ${avail_mb}MB (كافية لملف ${PROFILE})"
+    return 0
+  fi
+  err "المساحة الحرة ${avail_mb}MB فقط، وملف ${PROFILE} يحتاج ~$(( need / 1024 ))MB."
+  say "الخيارات:  bash setup.sh --tools-only   (أخف ملف)   ·   أو احرّض مساحة ثم أعد الأمر"
+  say "أو تجاهل التحذير:  TD_FORCE=1 bash setup.sh --profile=${PROFILE}"
+  [ "${TD_FORCE:-0}" = "1" ] && { warn "TD_FORCE=1 — سيُكمل على مسؤوليتك."; return 0; }
+  if assume_yes; then
+    die "المساحة غير كافية لملف ${PROFILE} — أكّد أنك تريد التخطي بإعادة الأمر مع TD_FORCE=1"
+  fi
+  confirm "تريد المتابعة رغم ذلك؟" || die "أُلغي التثبيت"
+}
+
+require_space
 log_head
 
 if ! is_termux; then

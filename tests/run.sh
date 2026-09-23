@@ -567,6 +567,37 @@ t "install.sh أنشأ المشروع في HOME الهدف" test -f "$FAKE/proje
 t "إيقاف خادم الـdemo" demo_stopped
 PIDS="${PIDS/ $DPID/}"
 
+
+# ------------------------- 13) حارس المساحة قبل التنزيل -------------------------
+space_gate_blocks() {
+  local out
+  out="$(env HOME="$FAKE" TD_FREE_KB=1000 NO_COLOR=1 bash "$ROOT/scripts/setup.sh" -y --full 2>&1 </dev/null)" && return 1
+  grep -q 'TD_FORCE=1' <<<"$out"
+}
+space_gate_force() {
+  env HOME="$FAKE" TD_FREE_KB=1000 TD_FORCE=1 NO_COLOR=1 bash "$ROOT/scripts/setup.sh" -y --full >/dev/null 2>&1 </dev/null
+}
+space_gate_ok() {
+  local out
+  out="$(env HOME="$FAKE" TD_FREE_KB=99999999 NO_COLOR=1 bash "$ROOT/scripts/setup.sh" -y --full 2>&1 </dev/null)"
+  grep -q 'كافية لملف full' <<<"$out"
+}
+space_gate_stair() {
+  . "$ROOT/scripts/lib/common.sh"
+  local a b prev=""
+  for a in tools python minimal full; do
+    b="$(td_profile_min_free_kb "$a")"
+    [ -z "$prev" ] || [ "$b" -gt "$prev" ] || { printf '      الحد غير متدرّج عند %s\n' "$a"; return 1; }
+    prev="$b"
+  done
+  return 0
+}
+t "setup.sh يرفض full عند ضيق المساحة" space_gate_blocks
+t "TD_FORCE=1 يتجاوز حارس المساحة" space_gate_force
+t "رسالة الطمأنينة لما المساحة كافية" space_gate_ok
+t "حد المساحة يتدرّج (tools<python<minimal<full)" space_gate_stair
+t "install.sh --force خيار معروف" bash -c "bash '$ROOT/install.sh' --force --check-only >/dev/null 2>&1"
+
 printf '\n%sالنتيجة%s\n  %sPASS: %s%s   %sFAIL: %s%s\n' "$B" "$N" "$G" "$PASS" "$N" "$R" "$FAIL" "$N"
 if [ "$FAIL" -gt 0 ]; then
   printf '  %sبعض الاختبارات فشلت — راجع السطور أعلاه.%s\n' "$R" "$N"

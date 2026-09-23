@@ -7,6 +7,8 @@
 #    bash install.sh --tools-only # git + أدوات فقط (للمساحة الضيقة)
 #    bash install.sh --check-only # يفحص فقط بدون أي تثبيت
 #    bash install.sh --demo       # تجهيز + فحص + توليد مشروع تجريبي وتشغيله
+#    bash install.sh --force      # تجاهل فحص المساحة الكافية (TD_FORCE=1)
+#  بدون أي خيار = ملف full (كل الحزم: Node + Python + أدوات).
 # ============================================================
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,10 +20,11 @@ ARGS=()
 for a in "$@"; do
   case "$a" in
     --check-only) MODE="check" ;;
+    --force)      TD_FORCE=1; export TD_FORCE ;;
     --demo)       MODE="demo" ;;
     --minimal|--tools-only|--python-only|--full) ARGS+=("${a}") ;;
     --profile=*)  ARGS+=("$a") ;;
-    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) printf 'خيار غير معروف: %s (جرّب --help)\n' "$a" >&2; exit 2 ;;
   esac
 done
@@ -65,6 +68,8 @@ case "$MODE" in
     printf '\n[وضع الفحص فقط]\n' ;;
   *)
     step_install_git
+    _free="$(df -Pk "${HOME:-.}" 2>/dev/null | awk 'NR==2{print $4}')"
+    [ -n "$_free" ] && printf 'المساحة الحرة قبل التثبيت: %sMB\n' "$((_free / 1024))"
     printf '\n→ bash scripts/setup.sh -y %s\n' "${ARGS[*]:-}"
     bash scripts/setup.sh -y ${ARGS[@]:-} ;;
 esac
