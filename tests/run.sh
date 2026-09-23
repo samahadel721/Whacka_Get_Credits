@@ -5,7 +5,9 @@
 #  وتختبر سكربتات الـ toolkit داخل HOME وهمي حتى لا تلمس جهازك.
 #  تشغيل:  bash tests/run.sh      (أو: make test)
 # ============================================================
-set -uo pipefail
+# لا -u هنا: مصادرة غير مقصودة لمتغيّر داخل نص مُمرَّر لـ bash -c كانت تُسكت
+# السكربت في منتصف الملف. سكربتات الأدوات نفسها تبقى على set -u.
+set -o pipefail
 export PYTHONDONTWRITEBYTECODE=1     # لا ملفات .pyc داخل القوالب أثناء الاختبار
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d "${ROOT}/.tmp-tests-XXXXXX")"
@@ -45,7 +47,8 @@ fi
 t() { # "اسم الاختبار" — أمر...
   local name="$1"; shift
   local out
-  if out="$("$@" 2>&1)"; then
+  # </dev/null: لازم — وإلا أي أمر يقرأ stdin سيلتهم بقية هذا السكربت
+  if out="$("$@" 2>&1 </dev/null)"; then
     printf '  %s✓%s %s\n' "$G" "$N" "$name"; PASS=$((PASS + 1))
   else
     printf '  %s✗%s %s\n' "$R" "$N" "$name"; FAIL=$((FAIL + 1))
@@ -53,6 +56,38 @@ t() { # "اسم الاختبار" — أمر...
   fi
 }
 py_check() { python3 "$TMP/pycheck.py" "$1"; }
+
+# لا نعدّ سيرفرات المستخدم الشغّالة فعلًا (مثلًا preview على 8080) — نفحص فقط
+# العمليات التي تعمل من داخل مجلد هذا التشغيل أو من داخل القوالب.
+no_stray_servers() {
+  local d cwd pid cmd bad=""
+  for d in /proc/[0-9]*/cwd; do
+    cwd="$(readlink "$d" 2>/dev/null)" || continue
+    case "$cwd" in
+      "$TMP"*|"$ROOT"/templates*) ;;
+      *) continue ;;
+    esac
+    pid="${d#/proc/}"; pid="${pid%/cwd}"
+    cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+    case "$cmd" in
+      *server.js*|*app.py*|*http.server*|*serve.sh*) bad="$bad ${pid}($(basename "$cwd"))" ;;
+    esac
+  done
+  if [ -n "$bad" ]; then
+    printf '      شاردة من الاختبارات: %s\n' "$bad"
+    return 1
+  fi
+  return 0
+}
+json_shape_ok() {
+  local out
+  if ! out="$( { bash "$ROOT/scripts/disk.sh" --json 2>&1 </dev/null | python3 "$TMP/jsonshape.py"; } 2>&1)"; then
+    printf '%s\n' "$out"
+    return 1
+  fi
+  printf '%s\n' "$out"
+  return 0
+}
 section() { printf '\n%s%s%s\n' "$B" "$1" "$N"; }
 skip()    { printf '  %s!%s %s\n' "$Y" "$N" "$1"; }
 
@@ -84,44 +119,60 @@ HAVE_PY=0;   command -v python3 >/dev/null 2>&1 && HAVE_PY=1
 HAVE_CURL=0; command -v curl    >/dev/null 2>&1 && HAVE_CURL=1
 HAVE_GIT=0;  command -v git     >/dev/null 2>&1 && HAVE_GIT=1
 
-cat > "$TMP/pycheck.py" <<'PYC'
-"""فحص صيغة بايثون بدون كتابة ملفات .pyc داخل المستودع."""
-import sys
+# كتابة الملفات المساعدة سطرًا بسطر — بديل here-doc: السكربت يُقرأ تدريجيًا،
+# وhere-doc وقت التشغيل يعتمد على إعادة القراءة من نفس الـ fd، وهو ما ينكسر إذا
+# لامست عملية فرعية ذلك الـ fd (سبب توقف صامت في منتصف الملف).
+emit() { # <path> <mode> <سطر...>
+  local f="$1" mode="$2" line
+  shift 2
+  : > "$f"
+  for line in "$@"; do printf '%s\n' "$line" >> "$f"; done
+  chmod "$mode" "$f"
+}
 
-src = open(sys.argv[1], encoding="utf-8").read()
-compile(src, sys.argv[1], "exec")
-PYC
+emit "$TMP/pycheck.py" 644 \
+  'import sys' \
+  'path = sys.argv[1]' \
+  'compile(open(path, encoding="utf-8").read(), path, "exec")'
 
-cat > "$TMP/jsonget.js" <<'JS'
-let d = "";
-process.stdin.on("data", (c) => (d += c)).on("end", () => {
-  const path = String(process.argv[2] || "").split(".").filter(Boolean);
-  let v;
-  try {
-    v = JSON.parse(d);
-    for (const k of path) v = Array.isArray(v) ? v[Number(k)] : v[k];
-  } catch {
-    process.exit(1);
-  }
-  if (v === undefined || v === null) process.exit(1);
-  console.log(typeof v === "object" ? JSON.stringify(v) : String(v));
-});
-JS
+emit "$TMP/jsonshape.py" 644 \
+  'import json' \
+  'import sys' \
+  '' \
+  'd = json.load(sys.stdin)' \
+  'for key in ("repo_apparent_bytes", "repo_kb", "files", "lines", "free_kb"):' \
+  '    assert key in d, "missing key: " + key' \
+  'assert d["repo_kb"] > 0, "repo_kb is zero"' \
+  'assert d["repo_apparent_bytes"] > 10000, "implausible repo size"' \
+  'print("      repo_kb=%s files=%s lines=%s" % (d["repo_kb"], d["files"], d["lines"]))'
 
-cat > "$TMP/longtitle.sh" <<'SH'
-#!/usr/bin/env bash
-# يرسل عنوانًا من 250 حرفًا (أكبر من حد 200) ويطبع كود الاستجابة فقط
-url="$1"
-long=$(printf 'x%.0s' $(seq 1 250))
-curl -sS -m 5 -o /dev/null -w '%{http_code}' \
-  -X POST -H 'content-type: application/json' \
-  --data "$(printf '{"title":"%s"}' "$long")" "$url" 2>/dev/null || echo 000
-SH
-chmod +x "$TMP/longtitle.sh"
+emit "$TMP/jsonget.js" 755 \
+  'let d = "";' \
+  'process.stdin.on("data", (c) => (d += c)).on("end", () => {' \
+  '  const path = String(process.argv[2] || "").split(".").filter(Boolean);' \
+  '  let v;' \
+  '  try {' \
+  '    v = JSON.parse(d);' \
+  '    for (const k of path) v = Array.isArray(v) ? v[Number(k)] : v[k];' \
+  '  } catch {' \
+  '    process.exit(1);' \
+  '  }' \
+  '  if (v === undefined || v === null) process.exit(1);' \
+  '  console.log(typeof v === "object" ? JSON.stringify(v) : String(v));' \
+  '});'
+
+long_title_code() { # <url> → كود استجابة لعنوان بطول 250 حرفًا (الحد المسموح 200)
+  local url="$1" long code
+  long="$(printf 'x%.0s' $(seq 1 250))"
+  code="$(curl -sS -m 5 -o /dev/null -w '%{http_code}' -X POST \
+      -H 'content-type: application/json' \
+      --data "{\"title\":\"$long\"}" "$url" 2>/dev/null || echo 000)"
+  printf '%s' "$code"
+}
 
 long_title_is_422() { # <port>
   local code
-  code="$("$TMP/longtitle.sh" "http://127.0.0.1:$1/api/items")"
+  code="$(long_title_code "http://127.0.0.1:$1/api/items")"
   [ "$code" = "422" ]
 }
 
@@ -371,7 +422,7 @@ t "docs/INSTALL.md يحذر من نسخة Play Store" bash -c "grep -qi 'Google 
 section "10) التنظيف: لا شاردة ولا منافذ معلّقة"
 # نُغلق كل منفذ استخدمناه ثم نتحقق أنه تحرّر — نفس المنطق الذي يستخدمه cleanup()
 for pp in $PORTS_USED; do
-  bash "$ROOT/scripts/serve.sh" --stop --port "$pp" >/dev/null 2>&1
+  bash "$ROOT/scripts/serve.sh" --stop --port "$pp" >/dev/null 2>&1 </dev/null
 done
 for i in $(seq 1 20); do
   remaining=0
@@ -384,13 +435,92 @@ done
 for pp in $PORTS_USED; do
   t "المنفذ $pp تحرّر" bash -c "! curl -sS -m 1 -o /dev/null 'http://127.0.0.1:$pp/'"
 done
-t "لا سيرفرات شاردة من القوالب" bash -c '
-  left=$(ps -eo args 2>/dev/null | grep -cE "^node server\.js$|^python3 app\.py$")
-  if [ "$left" != 0 ]; then
-    echo "      عملية شاردة: $left"
-    ps -eo pid,args | grep -E "^ *[0-9]+ (node server.js|python3 app.py)$" | sed "s/^/        /"
-    exit 1
-  fi'
+t "لا سيرفرات شاردة من القوالب" no_stray_servers
+
+# ================================================================ 11
+section "11) disk.sh — قياسات المساحة وملفات التثبيت"
+# مساعدات في نطاق الأب: بلا استبدال متأخر داخل bash -c (مصدر أخطاء صامتة)
+disk_out() { bash "$ROOT/scripts/disk.sh" "$@" 2>&1 </dev/null; }
+disk_has() { # <نص متوقع> [وسيط]
+  local needle="$1" arg="${2:-}" out
+  out="$(disk_out $arg)"
+  printf '%s' "$out" | grep -qF -- "$needle" || { printf '      ناقص: %s\n' "$needle"; return 1; }
+}
+plan_has() { # <profile>
+  local out; out="$(disk_out --plan)"
+  printf '%s' "$out" | grep -qE "(^|[[:space:]])$1([[:space:]]|$)"
+}
+
+for key in 'المستودع نفسه' 'مساحة كل ملف' 'القرص الآن' 'الكاشات' 'بعد التوليد'; do
+  t "تقرير: يحتوي «$key»" disk_has "$key"
+done
+for pr in full minimal python tools; do
+  t "--plan يعرض profile «$pr»" plan_has "$pr"
+done
+t "disk.sh --project على الريبو"    disk_has "مساحة المشروع" "--project $ROOT"
+t "disk.sh --project لمسار وهمي يفشل" bash -c "! bash '$ROOT/scripts/disk.sh' --project /nonexistent-xyz >/dev/null 2>&1"
+t "disk.sh --json صالح"             json_shape_ok
+t "disk.sh --help"                  bash "$ROOT/scripts/disk.sh" --help
+t "disk.sh --clean لا ينكسر"        bash -c "env HOME='$FAKE' NO_COLOR=1 bash '$ROOT/scripts/disk.sh' --clean >/dev/null 2>&1; [ \$? -le 1 ]"
+
+# محوّل التقدير: apt وهمي بمخرج Termux القياسي
+mkdir -p "$TMP/fakeapt"
+emit "$TMP/fakeapt/apt-sim.txt" 644 \
+  "Reading package lists..." \
+  "Building dependency tree..." \
+  "The following NEW packages will be installed:" \
+  "  curl fd git jq nano nodejs-lts openssh python python-pip ripgrep tmux tree unzip wget zip" \
+  "Need to get 62.4 MB of archives." \
+  "After this operation, 318 MB of additional disk space will be used." \
+  "0 upgraded, 18 newly installed, 0 to remove and 0 not upgraded."
+# البيئة الوهمية لـ apt: أمر apt-get بديل يطبع نص محاكاة جاهزًا
+apt_env() {
+  PATH="$TMP/fakeapt:$PATH"
+  TD_APT_SIM="$TMP/fakeapt/apt-sim.txt"
+  HOME="$FAKE"
+  NO_COLOR=1
+  export TD_APT_SIM HOME NO_COLOR
+}
+apt_parser_ok() {
+  local out
+  out="$( ( apt_env; bash -c '. "$1/scripts/lib/common.sh"; apt_projection full' _ "$ROOT" ) 2>&1 </dev/null )"
+  [ "$out" = "18|62.4 MB|318 MB" ] || { printf '      وصل: [%s]\n' "$out"; return 1; }
+}
+plan_uses_sim() {
+  local out
+  out="$( ( apt_env; bash "$ROOT/scripts/disk.sh" --plan ) 2>&1 </dev/null )"
+  printf '%s' "$out" | grep -q "318 MB" || { printf '%s\n' "$out" | tail -6 | sed 's/^/      /'; return 1; }
+}
+profile_sizes_stair() {
+  local a b c
+  a="$(. "$ROOT/scripts/lib/common.sh"; td_profile_packages tools | wc -l)"
+  b="$(. "$ROOT/scripts/lib/common.sh"; td_profile_packages minimal | wc -l)"
+  c="$(. "$ROOT/scripts/lib/common.sh"; td_profile_packages full | wc -l)"
+  [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] || { printf '      tools=%s minimal=%s full=%s\n' "$a" "$b" "$c"; return 1; }
+}
+setup_prints_projection() {
+  local out
+  out="$( ( apt_env; bash "$ROOT/scripts/setup.sh" -y ) 2>&1 </dev/null )"
+  printf '%s' "$out" | grep -q "التقدير من apt" || { printf '%s\n' "$out" | tail -6 | sed 's/^/      /'; return 1; }
+}
+
+emit "$TMP/fakeapt/apt-get" 755 \
+  '#!/usr/bin/env bash' \
+  'exec cat "$TD_APT_SIM"'
+
+t "apt_projection يحلّل مخرج apt" apt_parser_ok
+t "--plan يستعمل نتيجة المحاكاة"  plan_uses_sim
+
+# ملفات التثبيت في setup.sh
+t "setup.sh --minimal يمرّ"        env HOME="$FAKE" NO_COLOR=1 bash "$ROOT/scripts/setup.sh" -y --minimal
+t "setup.sh --tools-only يمرّ"     env HOME="$FAKE" NO_COLOR=1 bash "$ROOT/scripts/setup.sh" -y --tools-only
+t "setup.sh --python-only يمرّ"    env HOME="$FAKE" NO_COLOR=1 bash "$ROOT/scripts/setup.sh" -y --python-only
+t "setup.sh --profile=bogus يرفض"  bash -c "! env HOME='$FAKE' NO_COLOR=1 bash '$ROOT/scripts/setup.sh' -y --profile=bogus >/dev/null 2>&1"
+t "setup.sh يعرض التقدير عند توفر apt" setup_prints_projection
+t "حزم الملفات تتدرّج (tools < minimal < full)" profile_sizes_stair
+t "profile أصغر لا يثبّت Node/Python" bash -c "
+  . '$ROOT/scripts/lib/common.sh'
+  ! td_profile_packages tools | grep -Eq 'nodejs|^python\$'"
 printf '\n%sالنتيجة%s\n  %sPASS: %s%s   %sFAIL: %s%s\n' "$B" "$N" "$G" "$PASS" "$N" "$R" "$FAIL" "$N"
 if [ "$FAIL" -gt 0 ]; then
   printf '  %sبعض الاختبارات فشلت — راجع السطور أعلاه.%s\n' "$R" "$N"

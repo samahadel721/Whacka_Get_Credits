@@ -10,15 +10,31 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 . "${HERE}/lib/common.sh"
 
-case "${1:-}" in -y|--yes|--assume-yes) TD_ASSUME_YES=1 ;; esac
+# الأعلام: -y | --minimal | --python-only | --tools-only | --full | --profile=NAME
+PROFILE="${TD_PROFILE:-full}"
+for _arg in "$@"; do
+  case "$_arg" in
+    -y|--yes|--assume-yes) TD_ASSUME_YES=1 ;;
+    --minimal)     PROFILE="minimal" ;;
+    --python-only) PROFILE="python" ;;
+    --tools-only)  PROFILE="tools" ;;
+    --full)        PROFILE="full" ;;
+    --profile=*)   PROFILE="${_arg#*=}" ;;
+    -h|--help)     sed -n '2,8p' "$0"; exit 0 ;;
+  esac
+done
+td_profile_packages "$PROFILE" >/dev/null 2>&1 || die "ملف تثبيت غير معروف: ${PROFILE} (المتاح: $(td_profiles))"
 
-PKGS_CORE=(git curl wget ripgrep jq zip unzip tar gnutar openssh nano)
-PKGS_NODE=(nodejs-lts)
-PKGS_PY=(python python-pip)
-PKGS_EXTRA=(tmux tree fd)
-INSTALL_EXTRA="${TD_INSTALL_EXTRA:-1}"
-
-log_head() { printf '\n=== termux-dev setup v%s ===\n' "$TD_VERSION"; }
+log_head() {
+  printf '\n=== termux-dev setup v%s — profile: %s ===\n' "$TD_VERSION" "$PROFILE"
+  local proj new dl extra
+  proj="$(apt_projection "$PROFILE" 2>/dev/null || true)"
+  if [ -n "$proj" ]; then
+    IFS='|' read -r new dl extra <<<"$proj"
+    say "التقدير من apt: ${new:-?} حزمة جديدة · تنزيل ${dl:-?} · قرص +${extra:-?}"
+    say "لمقارنة الملفات:  bash ${HERE}/disk.sh --plan"
+  fi
+}
 
 log_head
 
@@ -80,8 +96,8 @@ install_pkgs() {
     say "إن احتجتها فعلاً: termux-change-repo لاختيار مرآة أخرى ثم أعد المحاولة"
   fi
 }
-install_pkgs "${PKGS_CORE[@]}" "${PKGS_NODE[@]}" "${PKGS_PY[@]}"
-[ "$INSTALL_EXTRA" = "1" ] && install_pkgs "${PKGS_EXTRA[@]}"
+mapfile -t PKGS_WANTED < <(td_profile_packages "$PROFILE")
+install_pkgs "${PKGS_WANTED[@]}"
 
 # ----------------------------------------------------------
 step "3/7  صلاحية التخزين المشترك"

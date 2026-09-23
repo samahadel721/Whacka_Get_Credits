@@ -2,15 +2,16 @@
 SHELL := /usr/bin/env bash
 HERE  := $(CURDIR)
 NAME ?= demo
-T    ?= node-api
+T       ?= node-api
+PROFILE ?= full
 
 .PHONY: help setup doctor new serve backup tunnel check test lint clean
 
 help:            ## عرض الأوامر المتاحة
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk -F'##' '{printf "  %-10s %s\n", $$1, $$2}'
 
-setup:           ## تجهيز البيئة على Termux
-	@bash $(HERE)/scripts/setup.sh -y
+setup:           ## تجهيز البيئة (أو: make setup PROFILE=minimal)
+	@bash $(HERE)/scripts/setup.sh -y $(if $(PROFILE),--profile=$(PROFILE),)
 
 doctor:          ## فحص صحة البيئة
 	@bash $(HERE)/scripts/doctor.sh
@@ -30,6 +31,15 @@ stop:            ## إيقاف سيرفر يسمع على بورت: make stop PO
 
 status:          ## من يسمع على البورت؟ make status PORT=8080
 	@bash $(HERE)/scripts/serve.sh --status $(if $(PORT),--port $(PORT),)
+
+disk:            ## تقرير مساحة: الريبو + القرص + الكاشات
+	@bash $(HERE)/scripts/disk.sh
+
+plan:            ## كم يضيف كل ملف تثبيت؟ (محاكاة apt)
+	@bash $(HERE)/scripts/disk.sh --plan
+
+uninstall-cache: ## تنظيف الكاشات وعرض ما وُفِّر
+	@bash $(HERE)/scripts/disk.sh --clean
 
 tunnel:          ## نفق تجريبي: make tunnel PORT=8080
 	@bash $(HERE)/scripts/tunnel.sh $(PORT)

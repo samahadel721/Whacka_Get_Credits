@@ -20,6 +20,38 @@ pkg upgrade -y
 
 ---
 
+## 0.5) احسب المساحة قبل ما تنزّل
+
+مشروع termux-dev نفسه صغير جدًا (أقل من 1MB مع التاريخ)؛ المساحة فعليًا بتروحه على **حزم Termux**. قبل التثبيت اسأل apt نفسه:
+
+```bash
+bash scripts/disk.sh --plan          # جدول مقارنة بين ملفات التثبيت
+bash scripts/disk.sh --plan minimal   # أو ملف معين
+df -h ~                              # كم فاضل عندك فعلًا
+```
+
+الأرقام المرجّعية (aarch64، تقريبية):
+
+| البند | تنزيل | على القرص |
+|---|---|---|
+| Termux app + bootstrap | ~110MB | ~120–180MB |
+| `tools` (git, curl, wget, ripgrep, jq, zip/unzip/tar, openssh, nano) | ~25MB | ~45–60MB |
+| `nodejs-lts` | ~35MB | ~110–130MB |
+| `python` + `python-pip` | ~18MB | ~65–80MB |
+| `tmux tree fd` | ~3MB | ~8MB |
+| **الإجمالي لملف `full`** | **~80MB** | **~330–420MB** |
+
+نصائح التوفير:
+
+- `bash scripts/setup.sh --tools-only` ثم `pkg install -y nodejs-lts` لما تبدأ مشروع Node فعلًا.
+- بعد كل `pkg upgrade`: `bash scripts/disk.sh --clean` (يفرّغ كاش apt وnpm ويطبع كم وفّرت).
+- `node_modules` بياخد 2–6MB للحزمة الواحدة وبيكبر بسرعة؛ امسحه لما مش محتاجه: `bash scripts/disk.sh --project ~/projects/myapp` بيورّيك الحجم أولًا.
+- لو الموبايل أقل من 2GB حرة، بلا `proot-distro` (التوزيعة وحدها 1GB+).
+
+> أعمدة «تنزيل/قرص» دي لتقدير الخطة فقط؛ `disk.sh --plan` بيجيب رقم جهازك من apt مباشرة.
+
+---
+
 ## 1) التجهيز الأساسي داخل التطبيق
 
 ```bash

@@ -36,10 +36,11 @@ bash scripts/serve.sh ~/projects/demo
 
 | الأمر | ماذا يفعل |
 |---|---|
-| `scripts/setup.sh [-y]` | يثبّت الحزم، يضبط سطر مفاتيح Termux، `npm prefix`، aliases، مجلد `~/projects`، وهوية git. تكراره آمن. |
+| `scripts/setup.sh [-y] [--minimal\|--python-only\|--tools-only]` | يثبّت الحزم، يضبط سطر مفاتيح Termux، `npm prefix`، aliases، مجلد `~/projects`، وهوية git. تكراره آمن. كل ملف تثبيت يعرض التقدير من apt قبل التنزيل. |
 | `scripts/doctor.sh [--json]` | يفحص 15 نقطة (صلاحية التخزين، مساحة القرص، 16KB page size، سلامة dpkg، git identity، الشبكة…) ويعطيك سطر «الحل» لكل مشكلة. |
 | `scripts/project.sh <name> -t <template>` | ينسخ قالباً جاهزاً، يستبدل الاسم، `git init` + أول commit. `--list` لعرض القوالب. |
 | `scripts/serve.sh [dir] [--port]` | سيرفر تطوير على `0.0.0.0` ويطبع رابط الشبكة، يحجب `.env` و`.git` تلقائياً، ويرفض المسارات خارج المجلد. |
+| `scripts/disk.sh [--plan\|--clean\|--project DIR\|--json]` | أرقام المساحة الحقيقية: حجم الريبو، ما يضيفه كل ملف تثبيت (محاكاة apt)، حالة القرص، والكاشات التي تنفّخ `$PREFIX`. |
 | `scripts/serve.sh --stop / --status --port N` | يوقف/يكشف من يسمع على المنفذ — عبر `ss`/`lsof` إن وُجدا، وإلا بقراءة `/proc` مباشرة. يفيد لما يعلق سيرفر على الموبايل ويحتل المنفذ. |
 | `scripts/tunnel.sh <port>` | رابط مؤقت للتجربة (cloudflared → ngrok → localtunnel → serveo حسب المتاح). |
 | `scripts/backup.sh [--push] [--shared]` | `commit` + رفع GitHub + أرشيف `tar.gz` في `~/backups` أو مجلد التنزيلات. |
@@ -82,6 +83,31 @@ bash scripts/project.sh myapp --template web-static    # موقع ثابت جا�
 - [docs/DEPLOY.md](docs/DEPLOY.md) — نقل مشروعك من الموبايل إلى سيرفر فعلي ونشره.
 
 ---
+
+## كم مساحة كل ده؟
+
+قِياس فعلي على هذا المستودع:
+
+| البند | الحجم |
+|---|---|
+| ملفات المشروع (41 ملفًا / ~3000 سطر) | **137 KB** |
+| `.git` بالتاريخ كاملًا | **449 KB** |
+| الـ clone كاملًا على القرص | **691 KB** (أقل من 1MB) |
+| مشروع تُولّده من قالب (`node-api`) | **~50 KB** (11 ملفًا، بلا `node_modules`) |
+| Termux + bootstrap | **~120–180 MB** |
+| `bash setup.sh` (ملف `full`: 17 حزمة) | **~350–450 MB** — منها nodejs-lts وحده ~120MB وpython ~70MB |
+| `--tools-only` (11 حزمة، بدون Node/Python) | **~50 MB** |
+
+الأرقام دي تقديرية للأحجام الكبيرة؛ عشان تاخد رقم جهازك بالضبط (قبل ما تنزّل أي حاجة):
+
+```bash
+bash scripts/disk.sh --plan          # يسأل apt نفسه: كم سيُضاف؟
+pkg install -s nodejs-lts python     # أو مباشرة: «additional disk space will be used»
+bash scripts/disk.sh                 # تقرير القرص + الكاشات التي يمكن تفريغها
+bash scripts/disk.sh --clean         # يفرّغ كاش apt/npm ويطبع كم وفّرت
+```
+
+> لو مساحتك ضيقة: ثبّت `--tools-only` (git + أدوات أساسية)، وأضِ `nodejs-lts` أو `python` وقت ما تحتاجه فعلًا. الحزم دي أكبر مستهلك للمساحة، مش ملفات المشروع.
 
 ## خارج النطاق
 

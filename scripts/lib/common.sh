@@ -131,3 +131,45 @@ stop_port() {
   done
   [ "$killed" -gt 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# ملفات التثبيت (profiles) — مشتركة بين setup.sh و disk.sh
+TD_PKG_CORE=(git curl wget ripgrep jq zip unzip tar gnutar openssh nano)
+TD_PKG_NODE=(nodejs-lts)
+TD_PKG_PY=(python python-pip)
+TD_PKG_EXTRA=(tmux tree fd)
+
+td_profile_packages() { # <profile> → قائمة الحزم
+  local profile="${1:-full}"
+  case "$profile" in
+    full)    printf '%s\n' "${TD_PKG_CORE[@]}" "${TD_PKG_NODE[@]}" "${TD_PKG_PY[@]}" "${TD_PKG_EXTRA[@]}" ;;
+    minimal) printf '%s\n' "${TD_PKG_CORE[@]}" "${TD_PKG_NODE[@]}" ;;
+    python)  printf '%s\n' "${TD_PKG_CORE[@]}" "${TD_PKG_PY[@]}" ;;
+    tools)   printf '%s\n' "${TD_PKG_CORE[@]}" ;;
+    *) return 1 ;;
+  esac
+}
+
+td_profiles() { printf 'full minimal python tools\n'; }
+
+# تقدير المساحة قبل التثبيت من apt نفسه (محاكاة بلا تنزيل).
+# يعيد سطرًا: "<حزم جديدة> <حجم التنزيل> <المساحة الإضافية>" أو يفشل بهدوء.
+apt_projection() { # <profile>
+  local profile="${1:-full}" pkgs=() line dl extra new
+  mapfile -t pkgs < <(td_profile_packages "$profile") || return 1
+  local apt_cmd=""
+  for cand in "apt-get" "apt"; do
+    have "$cand" && { apt_cmd="$cand"; break; }
+  done
+  [ -n "$apt_cmd" ] || return 1
+
+  line="$("$apt_cmd" -s install "${pkgs[@]}" 2>/dev/null \
+          | grep -E 'Need to get|additional disk space|newly installed' | tr '\n' '|' )"
+  [ -n "$line" ] || return 1
+
+  # grep -oE بدل sed: أنماط sed greedy كانت تبتلع جزءًا من الرقم
+  new="$(grep -oE '[0-9]+ newly installed' <<<"$line" | head -1 | awk '{print $1}')"
+  dl="$(grep -oE 'Need to get [0-9.]+ [kMG]B' <<<"$line" | head -1 | awk '{print $4" "$5}')"
+  extra="$(grep -oE '[0-9.]+ ?[kMG]B of additional disk space' <<<"$line" | head -1 | sed 's/ of additional disk space//')"
+  printf '%s|%s|%s\n' "${new:-?}" "${dl:-?}" "${extra:-?}"
+}
