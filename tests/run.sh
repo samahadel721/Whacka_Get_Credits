@@ -474,6 +474,20 @@ emit "$TMP/fakeapt/apt-sim.txt" 644 \
   "After this operation, 318 MB of additional disk space will be used." \
   "0 upgraded, 18 newly installed, 0 to remove and 0 not upgraded."
 # البيئة الوهمية لـ apt: أمر apt-get بديل يطبع نص محاكاة جاهزًا
+allowed_root_dirs=" ci docs scripts templates tests .github "
+root_dirs_ok() {
+  local d name bad=""
+  for d in "$ROOT"/*/ "$ROOT"/.*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    case "$name" in .git|.gitignore|.tmp-*|.nox|node_modules|.venv|__pycache__) continue;; esac
+    case " $allowed_root_dirs " in *" $name "*) continue;; esac
+    bad="$bad $name/"
+  done
+  [ -z "$bad" ] || { printf '      مجلد غير متوقع في الجذر:%s\n' "$bad"; return 1; }
+  return 0
+}
+
 apt_env() {
   PATH="$TMP/fakeapt:$PATH"
   TD_APT_SIM="$TMP/fakeapt/apt-sim.txt"
@@ -521,6 +535,38 @@ t "حزم الملفات تتدرّج (tools < minimal < full)" profile_sizes_st
 t "profile أصغر لا يثبّت Node/Python" bash -c "
   . '$ROOT/scripts/lib/common.sh'
   ! td_profile_packages tools | grep -Eq 'nodejs|^python\$'"
+
+# ------------------------- 12) نقطة الدخول install.sh + سلامة الجذر -------------------------
+t "جذر المستودع فيه المجلدات المتوقعة فقط" root_dirs_ok
+t "install.sh موجود ويعمل --help" bash -c "test -f '$ROOT/install.sh' && bash '$ROOT/install.sh' --help | grep -q 'check-only'"
+t "install.sh --check-only يمرّ" bash -c "env HOME='$FAKE' NO_COLOR=1 bash '$ROOT/install.sh' --check-only >/dev/null 2>&1"
+t "install.sh يرفض خيارًا مجهولًا" bash -c "! env HOME='$FAKE' NO_COLOR=1 bash '$ROOT/install.sh' --nope >/dev/null 2>&1"
+
+PDP="$(free_port)"; track_port "$PDP"
+demo_health_ok() {
+  local i
+  for i in $(seq 1 160); do   # حتى 40 ثانية: install.sh يشغّل setup + doctor قبل أن يفتح الخادم
+    if curl -sS -m 2 "http://127.0.0.1:$PDP/api/health" 2>/dev/null | grep -qF '"status":"ok"'; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  printf '      لم يستجب الخادم — آخر السجل:\n'
+  tail -6 "$TMP/demo.log" 2>/dev/null | sed 's/^/        /'
+  return 1
+}
+demo_stopped() {
+  kill "$DPID" 2>/dev/null
+  sleep 0.5
+  ! curl -sS -m 2 -o /dev/null "http://127.0.0.1:$PDP/api/health" 2>/dev/null
+}
+( env HOME="$FAKE" NO_COLOR=1 PORT="$PDP" bash "$ROOT/install.sh" --demo --tools-only >"$TMP/demo.log" 2>&1 ) &
+DPID=$!; PIDS="$PIDS $DPID"
+t "install.sh --demo يولّد مشروعًا ويشغّله" demo_health_ok
+t "install.sh أنشأ المشروع في HOME الهدف" test -f "$FAKE/projects/termux-dev-demo/server.js"
+t "إيقاف خادم الـdemo" demo_stopped
+PIDS="${PIDS/ $DPID/}"
+
 printf '\n%sالنتيجة%s\n  %sPASS: %s%s   %sFAIL: %s%s\n' "$B" "$N" "$G" "$PASS" "$N" "$R" "$FAIL" "$N"
 if [ "$FAIL" -gt 0 ]; then
   printf '  %sبعض الاختبارات فشلت — راجع السطور أعلاه.%s\n' "$R" "$N"

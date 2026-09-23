@@ -1,7 +1,0 @@
-Reading package lists...
-Building dependency tree...
-The following NEW packages will be installed:
-  curl fd git jq nano nodejs-lts openssh python python-pip ripgrep tmux tree unzip wget zip
-Need to get 62.4 MB of archives.
-After this operation, 318 MB of additional disk space will be used.
-0 upgraded, 18 newly installed, 0 to remove and 0 not upgraded.

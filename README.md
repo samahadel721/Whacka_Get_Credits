@@ -8,6 +8,9 @@
 
 ## 30 ثانية وتبدأ
 
+### لو `git` متاح عندك
+
+
 ```bash
 # 1) داخل Termux على الموبايل
 pkg update -y && pkg install -y git
@@ -25,6 +28,17 @@ bash scripts/project.sh demo --template node-api
 bash scripts/serve.sh ~/projects/demo
 #    ثم افتح في متصفح الموبايل:  http://127.0.0.1:8080
 ```
+
+### أو بلا git — نزّل حزمة جاهزة
+من الكمبيوتر أو المتصفح: <https://github.com/samahadel721/Whacka_Get_Credits/archive/refs/heads/main.zip> (~80KB)، انقلها لمجلد الهاتف، ثم:
+
+```bash
+termux-setup-storage
+cd ~ && mkdir -p tools && tar xzf ~/storage/shared/termux-dev.tar.gz -C ~/tools/termux-dev   # أو unzip للنسخة .zip
+cd ~/tools/termux-dev && bash install.sh
+```
+
+`install.sh` يفحص سلامة الملفات أولًا، يثبّت `git` لو ناقص، يشغّل `setup.sh` ثم `doctor.sh`، وفيه `--demo` يولّد مشروعًا تجريبيًا ويشغّله فورًا.
 
 لو التثبيت من GitHub بطيء عندك، راجع [تغيير مستودع الحزم](docs/INSTALL.md#مستودعات-الحزم-بطيئة).
 
