@@ -5,7 +5,7 @@ NAME ?= demo
 T       ?= node-api
 PROFILE ?= full
 
-.PHONY: help setup doctor new serve backup tunnel check test lint clean
+.PHONY: help setup doctor new serve backup tunnel check test lint clean counter
 
 help:            ## عرض الأوامر المتاحة
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk -F'##' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -31,6 +31,10 @@ stop:            ## إيقاف سيرفر يسمع على بورت: make stop PO
 
 status:          ## من يسمع على البورت؟ make status PORT=8080
 	@bash $(HERE)/scripts/serve.sh --status $(if $(PORT),--port $(PORT),)
+
+URL ?=
+counter:         ## فحص عدّاد الزوار: make counter URL=https://example.com
+	@bash $(HERE)/scripts/counter.sh $(URL) --tries 4
 
 disk:            ## تقرير مساحة: الريبو + القرص + الكاشات
 	@bash $(HERE)/scripts/disk.sh

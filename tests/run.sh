@@ -598,6 +598,82 @@ t "رسالة الطمأنينة لما المساحة كافية" space_gate_ok
 t "حد المساحة يتدرّج (tools<python<minimal<full)" space_gate_stair
 t "install.sh --force خيار معروف" bash -c "bash '$ROOT/install.sh' --force --check-only >/dev/null 2>&1"
 
+
+# ------------------------- 14) counter.sh — فحص عدّاد الزوار -------------------------
+if [ "$HAVE_NODE" = "1" ] && [ "$HAVE_CURL" = "1" ]; then
+  section "14) counter.sh — فحص عدّاد الزوار"
+
+  local_js=(
+    'const http = require("http");'
+    'let n = 0;'
+    'const port = Number(process.env.PORT);'
+    'const wrap = (b) => "<!doctype html><html><head><title>t</title></head><body>" + b + "</body></html>";'
+    'const send = (res, body, extra) => res.writeHead(200, Object.assign({ "content-type": "text/html" }, extra || {})) && res.end(body);'
+    'http.createServer((req, res) => {'
+    '  const u = req.url.split("?")[0];'
+    '  if (u === "/none") { return send(res, wrap("<h1>hi</h1>")); }'
+    '  if (u === "/frozen") { return send(res, wrap("<span id=\"visitors\">1208</span>")); }'
+    '  if (u === "/empty") { return send(res, wrap("<span id=\"visitors\"></span>")); }'
+    '  if (u === "/js-only") {'
+    '    return send(res, wrap("<div id=\"app\"></div><script src=\"https://www.googletagmanager.com/gtag/js?id=G-12AB34CD56\"></script>"));'
+    '  }'
+    '  n += 1;'
+    '  return send(res, wrap("<span id=\"visitor-count\">" + n + "</span><p>عدد الزوار: " + n + "</p>"), {'
+    '    "cache-control": "no-store", "set-cookie": "sid=" + n,'
+    '  });'
+    '}).listen(port, "127.0.0.1");'
+  )
+  emit "$TMP/counter_fixture.js" 644 "${local_js[@]}"
+
+  PCP="$(free_port)"; track_port "$PCP"
+  ( env PORT="$PCP" node "$TMP/counter_fixture.js" >"$TMP/fixture.log" 2>&1 ) &
+  FPID=$!; PIDS="$PIDS $FPID"
+  wait_port 127.0.0.1 "$PCP" 20
+
+  counter_rc_is() { # <rc متوقع> <path> [أعلام...]
+    local want="$1" path="$2"; shift 2
+    local rc=0
+    bash "$ROOT/scripts/counter.sh" "http://127.0.0.1:$PCP$path" --tries 3 --gap 0.15 "$@" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" != "$want" ]; then printf '      rc=%s والمتوقع %s\n' "$rc" "$want"; return 1; fi
+    return 0
+  }
+  counter_shows() { # <path> <نص متوقع في الخرج>
+    local out
+    out="$(bash "$ROOT/scripts/counter.sh" "http://127.0.0.1:$PCP$1" --tries 3 --gap 0.15 2>&1)"
+    if ! grep -qF "$2" <<<"$out"; then
+      printf '      مفيش «%s» في الخرج:\n' "$2"
+      printf '%s\n' "$out" | tail -5 | sed 's/^/        /'
+      return 1
+    fi
+    return 0
+  }
+  counter_json_ok() {
+    local out
+    out="$(bash "$ROOT/scripts/counter.sh" "http://127.0.0.1:$PCP/" --tries 2 --gap 0.1 --json 2>/dev/null || true)"
+    if ! printf '%s' "$out" | node "$TMP/jsonget.js" verdict >/dev/null 2>&1; then
+      printf '      JSON غير قابل للتحليل: %s\n' "$(printf '%s' "$out" | head -c 120)"; return 1
+    fi
+    grep -q '"increments":true' <<<"$out" && grep -q '"http_code":200' <<<"$out"
+  }
+
+  t "عدّاد بيتحرك → rc=0"        counter_rc_is 0 /
+  t "بلا عدّاد → rc=1"           counter_rc_is 1 /none
+  t "عنصر عدّاد فاضي → rc=5"     counter_rc_is 5 /empty
+  t "عدّاد ثابت → rc=3"          counter_rc_is 3 /frozen
+  t "رابط مش http → rc=4"       bash -c "bash '$ROOT/scripts/counter.sh' 'ftp://x' >/dev/null 2>&1 || [ \$? -eq 4 ]"
+  t "منفذ مش شغال → rc=2"        bash -c "bash '$ROOT/scripts/counter.sh' 'http://127.0.0.1:1/' >/dev/null 2>&1 || [ \$? -eq 2 ]"
+  t "--bust بيشتغل مع الفحص"     counter_rc_is 0 / --bust
+  t "--save يحفظ الصفحة"         bash -c "bash '$ROOT/scripts/counter.sh' 'http://127.0.0.1:$PCP/none' --tries 1 --save '$TMP/saved.html' >/dev/null 2>&1; grep -q '<title>t</title>' '$TMP/saved.html'"
+  t "الخرج فيه اسم العنصر"       counter_shows / 'visitor-count'
+  t "الخرج فيه القيم نقطة-نقطة"  counter_shows / 'القيم:'
+  t "كشف Google Analytics ومعرّف القياس" counter_shows /js-only 'G-12AB34CD56'
+  t "--json صحيح وفيه increments" counter_json_ok
+  t "--help بيشرح أرقام الخروج"   bash -c "bash '$ROOT/scripts/counter.sh' --help | grep -q 'أرقام الخروج'"
+
+  kill "$FPID" 2>/dev/null || true
+  PIDS="${PIDS/ $FPID/}"
+fi
+
 printf '\n%sالنتيجة%s\n  %sPASS: %s%s   %sFAIL: %s%s\n' "$B" "$N" "$G" "$PASS" "$N" "$R" "$FAIL" "$N"
 if [ "$FAIL" -gt 0 ]; then
   printf '  %sبعض الاختبارات فشلت — راجع السطور أعلاه.%s\n' "$R" "$N"

@@ -81,3 +81,24 @@ bash scripts/project.sh demo -t node-api
 bash scripts/serve.sh ~/projects/demo --port 8080 --open
 bash scripts/backup.sh --push --shared
 ```
+
+
+## فحص عدّاد الزوار في موقعك
+
+```bash
+bash scripts/counter.sh https://example.com --tries 4      # الحكم المختصر
+bash scripts/counter.sh https://example.com --bust          # لو الرقم متجمّد (كاش CDN)
+bash scripts/counter.sh https://example.com --json | jq .   # للـ scripts
+bash scripts/counter.sh https://example.com --save /tmp/p.html
+```
+
+| rc | المعنى |
+|---|---|
+| 0 | العدّاد موجود وبيتحرك |
+| 3 | موجود بس ثابت (كاش / زائر واحد في اليوم / كوكيز) |
+| 1 | مفيش عدّاد في الـ HTML (رقم مُحقن بالـ JS؟ خدمة إحصاء؟) |
+| 2 | مفيش وصول للرابط |
+| 5 | وسم العدّاد موجود بس فاضي (الرقم بيتحقن بالـ JS أو الـ API فاشل) |
+| 4 | استخدام غلط (رابط مش http أو علم مجهول) |
+
+الأداة بتعمل طلبات قراءة عادية بالظبط زي المتصفح — مش بتولّد زيارات ولا بتغيّر أي رقم.
